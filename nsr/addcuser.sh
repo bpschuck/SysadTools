@@ -5,6 +5,9 @@
 # vim: set ts=4 sw=4:
 #
 
+# NFSMOUNT will be set to 1 if we mount /mnthome
+NFSMOUNT=0
+
 usage () {
 
 echo -e "Usage: $0 -u UID -l Login -c \"Full Name\" [-d HomeDir]"
@@ -74,19 +77,23 @@ if awk -F: '{print $6}' /etc/passwd | grep -wq $HOMEDIR ; then
 	exit 1
 fi
 
-# All checks passed. Now temporarily mount Autohome NAS
-mount -t nfs -o rw,sync,vers=3,hard,fg,lock,proto=tcp,rsize=32768,wsize=32768 px12-450r-01.steelrule.com:/nfs/AutoHome /mnthome
-if [ $? -ne 0 ]; then
-	echo -e "ERROR: Could not mount NFS." >&2
-	exit 1
+# All checks passed. Now temporarily mount Autohome NAS only if $HOMEDIR does not exist
+if [ ! -d "$HOMEDIR" ]; then
+	mount -t nfs -o rw,sync,vers=3,hard,fg,lock,proto=tcp,rsize=32768,wsize=32768 px12-450r-01.steelrule.com:/nfs/AutoHome /mnthome
+	if [ $? -ne 0 ]; then
+		echo -e "ERROR: Could not mount NFS." >&2
+		exit 1
+	else
+		NFSMOUNT=1
+	fi
 fi
 
 sleep 1
 
 # Run useradd command
-# If $TMPDIR exists we assume the account was added on the other server
+# If $HOMEDIR exists we assume the account was added on the other server
 # and there is no need to create the directory.
-if [ -d "$TMPDIR" ]; then
+if [ -d "$HOMEDIR" ]; then
 	MAKEDIR="-M"
 else
 	MAKEDIR="-m -k /etc/skel"
@@ -95,7 +102,7 @@ useradd -u $USERID -g conetic -c "$FULLNAME" -d "$TMPDIR" \
  $MAKEDIR -s /bin/bash $LOGIN
 if [ $? -ne 0 ]; then
 	echo -e "ERROR: Useradd failed." >&2
-	umount /mnthome
+	[ "$NFSMOUNT" -eq 1 ] && umount /mnthome
 	exit 1
 fi
 
@@ -105,14 +112,14 @@ sleep 1
 usermod -d "$HOMEDIR" $LOGIN
 if [ $? -ne 0 ]; then
 	echo "ERROR: Could not change Home Directory for $LOGIN" >&2
-	umount /mnthome
+	[ "$NFSMOUNT" -eq 1 ] && umount /mnthome
 	exit 1
 fi
 
 sleep 1
 
 # Unmount temporary NFS mount
-umount /mnthome
+[ "$NFSMOUNT" -eq 1 ] && umount /mnthome
 
 # Just a quick check of the new user directory
 su - $LOGIN -c "ls -laR"
