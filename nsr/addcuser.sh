@@ -77,7 +77,8 @@ if awk -F: '{print $6}' /etc/passwd | grep -wq $HOMEDIR ; then
 	exit 1
 fi
 
-# All checks passed. Now temporarily mount Autohome NAS only if $HOMEDIR does not exist
+# All checks passed. Now temporarily mount Autohome NAS
+# only if $HOMEDIR does not exist
 if [ ! -d "$HOMEDIR" ]; then
 	mount -t nfs -o rw,sync,vers=3,hard,fg,lock,proto=tcp,rsize=32768,wsize=32768 px12-450r-01.steelrule.com:/nfs/AutoHome /mnthome
 	if [ $? -ne 0 ]; then
