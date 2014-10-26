@@ -1,17 +1,18 @@
 #!/bin/bash
 #
-# $Id$
+# $Id: addcuser.sh,v 1.4 2014/10/26 21:40:29 bschuck Exp $
 # Script to add Conetic Software user
 # vim: set ts=4 sw=4:
 #
 
+HOMEDIR=
 # NFSMOUNT will be set to 1 if we mount /mnthome
 NFSMOUNT=0
 
 usage () {
 
 echo -e "Usage: $0 -u UID -l Login -c \"Full Name\" [-d HomeDir]"
-echo -e "\t-u\tUID is the numeric userid in thr range 1000-1999"
+echo -e "\t-u\tUID is the numeric userid in the range 1000-1999"
 echo -e "\t-l\tLogin to be assigned."
 echo -e "\t-c\tUser's full name."
 echo -e "\t-d\tHomeDir is the user Home Directory, default is /home/<Login>."
@@ -54,9 +55,9 @@ fi
 # Also set temporary NFS mount name since useradd will not automount /home
 if [ -z "$HOMEDIR" ]; then
 	HOMEDIR="/home/$LOGIN"
-	TMPDIR="/mnthome/$LOGIN"
+	TMPHDIR="/mnthome/$LOGIN"
 else
-	TMPDIR="/mnthome/${HOMEDIR##*/}"
+	TMPHDIR="/mnthome/${HOMEDIR##*/}"
 fi
 
 # Check that UID is not already in /etc/passwd
@@ -80,6 +81,7 @@ fi
 # All checks passed. Now temporarily mount Autohome NAS
 # only if $HOMEDIR does not exist
 if [ ! -d "$HOMEDIR" ]; then
+	echo -e "Mounting: px12-450r-01.steelrule.com:/nfs/AutoHome /mnthome"
 	mount -t nfs -o rw,sync,vers=3,hard,fg,lock,proto=tcp,rsize=32768,wsize=32768 px12-450r-01.steelrule.com:/nfs/AutoHome /mnthome
 	if [ $? -ne 0 ]; then
 		echo -e "ERROR: Could not mount NFS." >&2
@@ -95,11 +97,14 @@ sleep 1
 # If $HOMEDIR exists we assume the account was added on the other server
 # and there is no need to create the directory.
 if [ -d "$HOMEDIR" ]; then
+	echo -e "$HOMEDIR exists, useradd will not create."
 	MAKEDIR="-M"
 else
+	echo -e "$HOMEDIR does not exist, useradd will create."
 	MAKEDIR="-m -k /etc/skel"
 fi
-useradd -u $USERID -g conetic -c "$FULLNAME" -d "$TMPDIR" \
+echo -e "Executing: useradd -u $USERID -g conetic -c \"$FULLNAME\" -d \"$TMPHDIR\" $MAKEDIR -s /bin/bash $LOGIN"
+useradd -u $USERID -g conetic -c "$FULLNAME" -d "$TMPHDIR" \
  $MAKEDIR -s /bin/bash $LOGIN
 if [ $? -ne 0 ]; then
 	echo -e "ERROR: Useradd failed." >&2
@@ -120,10 +125,19 @@ fi
 sleep 1
 
 # Unmount temporary NFS mount
+echo -e "Unmounting /mnthome"
 [ "$NFSMOUNT" -eq 1 ] && umount /mnthome
 
+echo -e "Please wait 10 seconds..."
+sync;sync
+sleep 10
+
 # Just a quick check of the new user directory
-su - $LOGIN -c "ls -laR"
+echo -e "Confirming user's $HOME"
+ls -ld "$HOMEDIR"
+if [ $? -ne 0 ]; then
+	echo -e "** NOTICE ** Please reconfirm that $HOME exists."
+fi
 
 echo -e "Setting Password for user $LOGIN:"
 passwd $LOGIN
