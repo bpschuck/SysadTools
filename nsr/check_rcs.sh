@@ -40,7 +40,7 @@ TODAY=$(date +%s)
 
 MAXTIME=$((DAYS*86400))
 
-for rcsfile in $(find $DIRS -type f -name '*,v' 2>/dev/null)
+for rcsfile in $(find $DIRS -xdev -type f -name '*,v' 2>/dev/null)
 do
 	LOCKER=$(rlog -L $rcsfile | grep -i "locked by")
 	rv=$?
